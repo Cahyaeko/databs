@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Factory Bad Stock SPA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    body { background-color: #f4f7f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; position: relative; }
+    button:active { transform: scale(0.98); }
+
+    /* WATERMARK OVERLAY */
+    .watermark-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 9999; overflow: hidden; }
+    .watermark-text { font-size: 6vw; font-weight: 900; color: rgba(0, 0, 0, 0.04); transform: rotate(-35deg); white-space: nowrap; letter-spacing: 0.2em; text-transform: uppercase; user-select: none; }
+
+    /* ROTASI HEADER 90 DEG - RAMPING & PRESISI */
+    .th-rotate-container {
+      height: 110px !important;
+      vertical-align: bottom !important;
+      padding-bottom: 50px !important;
+      padding-left: 1px !important;
+      padding-right: 1px !important;
+      position: relative;
+    }
+    .th-rotate-text {
+      writing-mode: horizontal-tb !important;
+      display: block;
+      transform: rotate(-90deg);
+      transform-origin: center center;
+      white-space: nowrap;
+      font-size: 8.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      width: 100px;
+      margin-left: -40px;
+    }
+
+    table.table-compact {
+      border-collapse: collapse;
+      width: 100%;
+      table-layout: fixed;
+    }
+    table.table-compact th, table.table-compact td {
+      border: 1px solid #94a3b8;
+      padding: 3px 1px;
+      font-size: 8.5px;
+      text-align: center;
+      vertical-align: middle;
+      box-sizing: border-box;
+      overflow: hidden;
+      word-wrap: break-word;
+    }
+
+    /* PENGATURAN CETAK KHUSUS A4: SKALA TABEL 50% & GRAFIK 1 BARIS DIPANGKAS 50% */
+     @media print {
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      body { background: white; color: black; }
+      .print-container { width: 100%; margin: 0; padding: 0; border: none; }
+      .watermark-overlay { display: none; }
+    }
+    .print-only { display: none; }
+  </style>
+</head>
+<body class="text-gray-800 antialiased min-h-screen flex flex-col">
+
+  <div class="watermark-overlay"><div class="watermark-text">PROD LIQ3 LC</div></div>
+
+  <!-- TOP BAR -->
+  <header class="bg-emerald-700 text-white shadow-md sticky top-0 z-50 no-print">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-industry text-xl"></i>
+        <span class="font-bold text-lg tracking-wide">SYSTEM BAD STOCK</span>
+      </div>
+      <div id="user-badge" class="hidden flex items-center space-x-3">
+        <div class="text-right leading-tight">
+          <div id="user-name-display" class="font-semibold text-sm">User</div>
+          <div id="user-role-display" class="text-xs text-emerald-200">ROLE</div>
+        </div>
+        <button onclick="logout()" class="bg-emerald-800 hover:bg-emerald-900 px-3 py-1.5 rounded-lg text-xs font-bold transition">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="toast-container" class="fixed top-16 right-4 left-4 z-50 max-w-sm mx-auto pointer-events-none no-print"></div>
+
+  <!-- DUAL PHASE POPUP CONFIRMATION MODAL -->
+  <div id="confirm-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 hidden no-print">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
+      <div class="bg-emerald-700 text-white p-4 flex justify-between items-center">
+        <h3 class="font-bold text-base flex items-center gap-2">
+          <i class="fa-solid fa-file-circle-check"></i>
+          <span id="modal-title">Fase 1: Input Pemakaian & Produksi</span>
+        </h3>
+        <button onclick="closeConfirmModal()" class="text-white/80 hover:text-white text-xl font-bold">&times;</button>
+      </div>
+
+      <div id="modal-phase-1" class="p-5 space-y-4">
+        <p class="text-xs text-gray-600 font-medium">Masukkan data pemakaian bahan dan hasil produksi (Box):</p>
+        
+        <!-- KOLOM INPUT HASIL PRODUKSI (BOX) -->
+        <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+          <label class="block text-xs font-bold text-emerald-800 mb-1"><i class="fa-solid fa-box-open mr-1"></i> HASIL PRODUKSI (Box):</label>
+          <input type="number" id="input-hasil-produksi" min="0" class="w-full p-2.5 bg-white border border-emerald-300 rounded-lg font-black text-sm text-emerald-900 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Contoh: 250">
+        </div>
+
+        <div id="wrapper-pemakaian-sp">
+          <label class="block text-xs font-bold text-gray-700 mb-1" id="label-pemakaian-sp">JUMLAH PEMAKAIAN SP (Pcs):</label>
+          <input type="number" id="input-pemakaian-sp" min="1" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Contoh: 10000">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">JUMLAH PEMAKAIAN KARDUS (Pcs):</label>
+          <input type="number" id="input-pemakaian-kardus" min="1" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Contoh: 500">
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl bg-gray-200 text-gray-700 font-bold text-xs">Batal</button>
+          <button onclick="goToPhase2()" class="px-5 py-2 rounded-xl bg-emerald-600 text-white font-black text-xs shadow flex items-center space-x-1">
+            <span>Lanjutkan</span>
+            <i class="fa-solid fa-arrow-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="modal-phase-2" class="p-4 overflow-y-auto space-y-3 text-xs hidden">
+        <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-200 grid grid-cols-2 gap-2 font-semibold text-emerald-900">
+          <div><span class="text-gray-500 uppercase text-[10px] block">Operator:</span><span id="modal-op-name">-</span></div>
+          <div><span class="text-gray-500 uppercase text-[10px] block">Meta Data:</span><span id="modal-op-meta">-</span></div>
+          <div class="col-span-2 border-t border-emerald-200 pt-1 mt-1 flex justify-between">
+            <span class="text-gray-600 uppercase text-[10px]">Hasil Produksi:</span>
+            <span id="modal-op-hprod" class="font-black text-emerald-800">0 Box</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-center" id="modal-grid-persen">
+          <div id="box-persen-sp" class="bg-amber-100 p-2.5 rounded-xl border border-amber-300">
+            <span class="text-[10px] font-bold text-amber-800 uppercase block">% BS SP</span>
+            <span id="modal-val-persen-sp" class="text-base font-black text-amber-900">0%</span>
+          </div>
+          <div class="bg-blue-100 p-2.5 rounded-xl border border-blue-300">
+            <span class="text-[10px] font-bold text-blue-800 uppercase block">% BS Kardus</span>
+            <span id="modal-val-persen-kardus" class="text-base font-black text-blue-900">0%</span>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-gray-700 uppercase mb-1.5 text-[11px]">Rincian Input Bad Stock:</h4>
+          <div id="modal-items-list" class="space-y-1 bg-gray-50 p-3 rounded-xl border border-gray-200 divide-y divide-gray-200"></div>
+        </div>
+
+        <div class="bg-gray-800 text-white p-3 rounded-xl flex justify-between items-center">
+          <span class="font-bold uppercase text-xs">Total BS Keseluruhan:</span>
+          <span id="modal-grand-total" class="text-lg font-black text-emerald-400">0 Pcs</span>
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2 border-t border-gray-200">
+          <button onclick="backToPhase1()" class="px-4 py-2 rounded-xl bg-gray-200 text-gray-700 font-bold text-xs">Kembali</button>
+          <button onclick="executeFinalSave()" id="btn-modal-agree" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow flex items-center space-x-1.5">
+            <i class="fa-solid fa-check"></i>
+            <span>Setuju & Simpan</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MAIN VIEW -->
+  <main class="flex-grow max-w-7xl w-full mx-auto p-3 sm:p-4 mb-20">
+
+    <!-- PAGE 1: LOGIN -->
+    <section id="view-login" class="flex items-center justify-center pt-8">
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 sm:p-8 w-full max-w-md">
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 mb-3">
+            <i class="fa-solid fa-boxes-stacked text-3xl"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-gray-800">Login Sistem BS</h2>
+          <p class="text-sm text-gray-500 mt-1">Masukkan ID & Password Pabrik</p>
+        </div>
+
+        <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Username</label>
+            <input type="text" id="login-username" required class="w-full px-4 py-3 rounded-lg border border-gray-300 font-medium text-base outline-none" placeholder="Masukkan username">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Password</label>
+            <input type="password" id="login-password" required class="w-full px-4 py-3 rounded-lg border border-gray-300 font-medium text-base outline-none" placeholder="Masukkan password">
+          </div>
+          <button type="submit" id="btn-login-submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-lg shadow border border-emerald-700 text-base flex justify-center items-center space-x-2">
+            <span>MASUK KE SISTEM</span>
+            <i class="fa-solid fa-arrow-right"></i>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- PAGE 2: OPERATOR (STANDING POUCH) -->
+    <section id="view-operator" class="hidden max-w-4xl mx-auto space-y-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1"><i class="fa-regular fa-calendar"></i> Tanggal</label>
+          <input type="date" id="op-date" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1"><i class="fa-solid fa-clock"></i> Shift Kerja</label>
+          <select id="op-shift" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-sm">
+            <option value="1">Shift 1 (07:00-15:00)</option>
+            <option value="2">Shift 2 (15:00-23:00)</option>
+            <option value="3">Shift 3 (23:00-07:00)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+          <h3 class="font-bold text-sm tracking-wide uppercase"><i class="fa-solid fa-box mr-1.5"></i> Pemakaian Kardus</h3>
+          <span id="subtotal-kardus" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+        </div>
+        <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="group-kardus"></div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+          <h3 class="font-bold text-sm tracking-wide uppercase"><i class="fa-solid fa-pouch-pack mr-1.5"></i> Pemakaian SP</h3>
+          <span id="subtotal-sp" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+        </div>
+        <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="group-sp"></div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+            <h3 class="font-bold text-sm uppercase"><i class="fa-solid fa-tag mr-1.5"></i> Tag Pin</h3>
+            <span id="subtotal-tagpin" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+          </div>
+          <div class="p-3 space-y-2.5" id="group-tagpin"></div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+            <h3 class="font-bold text-sm uppercase"><i class="fa-solid fa-tape mr-1.5"></i> IST</h3>
+            <span id="subtotal-ist" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+          </div>
+          <div class="p-3 space-y-2.5" id="group-ist"></div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mt-6">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-bold text-gray-800 text-sm uppercase"><i class="fa-solid fa-history mr-1.5"></i> Riwayat Input Saya (50 Terakhir)</h3>
+          <button onclick="loadOperatorLogs(false)" class="text-xs bg-gray-100 px-2.5 py-1 rounded font-semibold"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="bg-gray-100 uppercase font-bold border-b">
+                <th class="p-2">ID Record</th><th class="p-2">Tgl / Shift</th><th class="p-2 text-right">Hasil Prod.</th><th class="p-2 text-right">Total BS</th><th class="p-2 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="operator-log-tbody"><tr><td colspan="5" class="p-4 text-center text-gray-400">Memuat riwayat...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 4: OPERATOR TYPE 2 (BOTOL / SHRINK) -->
+    <section id="view-operator-botol" class="hidden max-w-4xl mx-auto space-y-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1"><i class="fa-regular fa-calendar"></i> Tanggal</label>
+          <input type="date" id="op-botol-date" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1"><i class="fa-solid fa-clock"></i> Shift Kerja</label>
+          <select id="op-botol-shift" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-sm">
+            <option value="1">Shift 1 (07:00-15:00)</option>
+            <option value="2">Shift 2 (15:00-23:00)</option>
+            <option value="3">Shift 3 (23:00-07:00)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+          <h3 class="font-bold text-sm uppercase"><i class="fa-solid fa-box mr-1.5"></i> Pemakaian Kardus</h3>
+          <span id="subtotal-b-kardus" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+        </div>
+        <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="group-b-kardus"></div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+          <h3 class="font-bold text-sm uppercase"><i class="fa-solid fa-bottle-water mr-1.5"></i> Bad Stock Botol</h3>
+          <span id="subtotal-b-botol" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+        </div>
+        <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="group-b-botol"></div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+          <h3 class="font-bold text-sm uppercase"><i class="fa-solid fa-film mr-1.5"></i> Bad Stock Shrink</h3>
+          <span id="subtotal-b-shrink" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+        </div>
+        <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="group-b-shrink"></div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+            <h3 class="font-bold text-sm uppercase"><i class="fa-solid fa-circle-dot mr-1.5"></i> Bad Stock Tutup</h3>
+            <span id="subtotal-b-tutup" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+          </div>
+          <div class="p-3 space-y-2.5" id="group-b-tutup"></div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="bg-emerald-700 text-white px-4 py-2.5 flex justify-between items-center">
+            <h3 class="font-bold text-sm uppercase"><i class="fa-solid fa-tape mr-1.5"></i> IST</h3>
+            <span id="subtotal-b-ist" class="bg-emerald-900 px-2.5 py-0.5 rounded-full text-xs font-black">0 Pcs</span>
+          </div>
+          <div class="p-3 space-y-2.5" id="group-b-ist"></div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mt-6">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="font-bold text-gray-800 text-sm uppercase"><i class="fa-solid fa-history mr-1.5"></i> Riwayat Input Saya (50 Terakhir)</h3>
+          <button onclick="loadOperatorLogs(true)" class="text-xs bg-gray-100 px-2.5 py-1 rounded font-semibold"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="bg-gray-100 uppercase font-bold border-b">
+                <th class="p-2">ID Record</th><th class="p-2">Tgl / Shift</th><th class="p-2 text-right">Hasil Prod.</th><th class="p-2 text-right">Total BS</th><th class="p-2 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="operator-botol-log-tbody"><tr><td colspan="5" class="p-4 text-center text-gray-400">Memuat riwayat...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 3: SUPERVISOR DASHBOARD DENGAN STICKY SIDEBAR -->
+    <section id="view-supervisor" class="hidden flex flex-col md:flex-row gap-4">
+      
+      <!-- SIDEBAR MENU BAR KIRI (STICKY) -->
+      <aside class="w-full md:w-64 bg-white rounded-xl shadow-sm border border-gray-200 p-4 sticky top-16 h-fit no-print">
+        <h3 class="font-black text-xs text-gray-400 uppercase tracking-wider mb-3">Menu Supervisor</h3>
+        <nav class="space-y-1.5">
+          <button onclick="switchSpvTab('tab-catatan')" id="nav-tab-catatan" class="w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-sm transition">
+            <i class="fa-solid fa-table-list w-4"></i>
+            <span>Catatan Tabel</span>
+          </button>
+          <button onclick="switchSpvTab('tab-grafik')" id="nav-tab-grafik" class="w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
+            <i class="fa-solid fa-chart-line w-4"></i>
+            <span>Grafik Mingguan</span>
+          </button>
+        </nav>
+      </aside>
+
+      <!-- KONTEN UTAMA DASHBOARD -->
+      <div class="flex-1 space-y-4">
+        
+        <!-- FILTER UMUM -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 no-print">
+          <h3 class="font-bold text-sm uppercase text-gray-700 mb-3"><i class="fa-solid fa-filter mr-1"></i> Filter Rekapitulasi & Grafik</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Mulai Tanggal</label><input type="date" id="spv-start-date" class="w-full p-2 bg-gray-50 border rounded text-xs font-bold"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Sampai Tanggal</label><input type="date" id="spv-end-date" class="w-full p-2 bg-gray-50 border rounded text-xs font-bold"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Shift</label><select id="spv-shift" class="w-full p-2 bg-gray-50 border rounded text-xs font-bold"><option value="ALL">Semua Shift</option><option value="1">Shift 1</option><option value="2">Shift 2</option><option value="3">Shift 3</option></select></div>
+            <div class="flex items-end space-x-2">
+              <button onclick="fetchSupervisorReport()" class="flex-1 bg-emerald-700 text-white font-bold py-2 px-3 rounded text-xs shadow flex justify-center items-center space-x-1"><i class="fa-solid fa-magnifying-glass"></i><span>Terapkan</span></button>
+              <button onclick="handlePrintReport()" class="bg-gray-800 text-white font-bold py-2 px-3 rounded text-xs shadow flex justify-center items-center space-x-1">
+            <i class="fa-solid fa-print"></i>
+            <span>Cetak (A4 PDF)</span>
+        </button>
+        </div>
+          </div>
+        </div>
+
+        <!-- TAB 1: CATATAN TABEL -->
+        <div id="spv-tab-catatan" class="space-y-6">
+          <!-- TABEL 1: STANDING POUCH LINE -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 print-container overflow-x-auto">
+            <h3 class="font-black text-emerald-800 text-xs uppercase mb-2">1. REKAPITULASI LINE STANDING POUCH (SP)</h3>
+            <table class="table-compact min-w-[1100px]">
+              <thead>
+                <tr class="bg-gray-100 font-bold uppercase">
+                  <th rowspan="2" class="p-1" style="width: 75px;">ID / Tgl</th>
+                  <th rowspan="2" class="p-1" style="width: 32px;">Shift</th>
+                  <th rowspan="2" class="p-1" style="width: 90px;">Operator</th>
+                  <th rowspan="2" class="p-1 bg-amber-50" style="width: 45px;">Pemakaian SP</th>
+                  <th rowspan="2" class="p-1 bg-blue-50" style="width: 45px;">Pemakaian Kd</th>
+                  <th rowspan="2" class="p-1 bg-amber-100" style="width: 45px;">% BS SP</th>
+                  <th rowspan="2" class="p-1 bg-blue-100" style="width: 45px;">% BS Kd</th>
+                  <th colspan="5" class="p-1 bg-amber-50">BS Kardus S/D Total BS</th>
+                  <th colspan="13" class="p-1 bg-blue-50">Standing Pouch (SP)</th>
+                  <th colspan="2" class="p-1 bg-purple-50">TagPin</th>
+                  <th colspan="2" class="p-1 bg-orange-50">IST</th>
+                  <th rowspan="2" class="p-1 bg-emerald-200" style="width: 45px;">Total BS</th>
+                  <th rowspan="2" class="p-1 bg-emerald-300" style="width: 45px;">Hasil Prod (Box)</th>
+                </tr>
+                <tr class="bg-gray-50 font-bold">
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Reject Gudang</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Sambung Lepas</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Sobek</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Miss Print</div></th>
+                  <th class="th-rotate-container font-black bg-amber-100" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Sealing Naik</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Mengkerut</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Berlilin</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Bocor</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Bocor Bottom</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Press Kosong</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Miss Print</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Double Pouch</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Lengket</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Berat Kurang</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Berat Lebih</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Jepit Sebelah</div></th>
+                  <th class="th-rotate-container font-black" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Putus</div></th>
+                  <th class="th-rotate-container font-black" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Putus</div></th>
+                  <th class="th-rotate-container font-black" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                </tr>
+              </thead>
+              <tbody id="spv-sp-tbody"><tr><td colspan="29" class="p-4 text-center text-gray-400">Silakan klik "Terapkan".</td></tr></tbody>
+            </table>
+          </div>
+
+          <div class="page-break"></div>
+
+          <!-- TABEL 2: BOTOL & SHRINK LINE -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 print-container overflow-x-auto">
+            <h3 class="font-black text-emerald-800 text-xs uppercase mb-2">2. REKAPITULASI LINE BOTOL & SHRINK</h3>
+            <table class="table-compact min-w-[1100px]">
+              <thead>
+                <tr class="bg-gray-100 font-bold uppercase">
+                  <th rowspan="2" class="p-1" style="width: 75px;">ID / Tgl</th>
+                  <th rowspan="2" class="p-1" style="width: 32px;">Shift</th>
+                  <th rowspan="2" class="p-1" style="width: 90px;">Operator</th>
+                  <th rowspan="2" class="p-1 bg-blue-50" style="width: 45px;">Pemakaian Kd</th>
+                  <th rowspan="2" class="p-1 bg-blue-100" style="width: 45px;">% BS Kd</th>
+                  <th colspan="5" class="p-1 bg-amber-50">BS Kardus S/D Total BS</th>
+                  <th colspan="9" class="p-1 bg-cyan-50">Botol</th>
+                  <th colspan="6" class="p-1 bg-teal-50">Shrink</th>
+                  <th colspan="4" class="p-1 bg-indigo-50">Tutup</th>
+                  <th colspan="2" class="p-1 bg-orange-50">IST</th>
+                  <th rowspan="2" class="p-1 bg-emerald-200" style="width: 45px;">Total BS</th>
+                  <th rowspan="2" class="p-1 bg-emerald-300" style="width: 45px;">Hasil Prod (Box)</th>
+                </tr>
+                <tr class="bg-gray-50 font-bold">
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Reject Gudang</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Sambung Lepas</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Sobek</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Miss Print</div></th>
+                  <th class="th-rotate-container font-black bg-amber-100" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Deform Before</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Deform After</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Penyok</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Bolong</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Lips Miring</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Drat Rusak</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Pundak Tipis</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Neck Pendek</div></th>
+                  <th class="th-rotate-container font-black" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Miss Print</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Mengkerut</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Sobek</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Lebar Tdk Std</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Potong Tdk Rata</div></th>
+                  <th class="th-rotate-container font-black" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">FlipTop Patah</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">FlipTop Tdk Tutup</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">DratCap No OK</div></th>
+                  <th class="th-rotate-container font-black" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                  <th class="th-rotate-container" style="width: 25px;"><div class="th-rotate-text">Putus</div></th>
+                  <th class="th-rotate-container font-black" style="width: 28px;"><div class="th-rotate-text">TOTAL</div></th>
+                </tr>
+              </thead>
+              <tbody id="spv-botol-tbody"><tr><td colspan="33" class="p-4 text-center text-gray-400">Silakan klik "Terapkan".</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB 2: GRAFIK MINGGUAN & PERSONAL ACCOUNT COMPARISON CHARTS -->
+        <div id="spv-tab-grafik" class="space-y-6 hidden">
+          <!-- WARNING BANNER OPERATOR TERTINGGI -->
+          <div id="operator-warning-banner" class="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-start space-x-3">
+            <div class="text-red-500 text-xl"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div>
+              <h4 class="font-black text-red-800 text-xs uppercase tracking-wider">Perhatian: Operator dengan Akumulasi BS Tertinggi</h4>
+              <p id="warning-banner-text" class="text-xs text-red-700 mt-0.5">Memuat analisis data operator...</p>
+            </div>
+          </div>
+
+          <!-- CONTAINER DINAMIS PERSONAL ACCOUNT CHARTS -->
+          <div id="operator-charts-container" class="space-y-6"></div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- BOTTOM BAR STICKY -->
+  <div id="sticky-bottom-bar" class="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-emerald-600 shadow-2xl p-3 z-40 hidden no-print">
+    <div class="max-w-4xl mx-auto flex justify-between items-center">
+      <div>
+        <div class="text-[10px] font-bold text-gray-500 uppercase">GRAND TOTAL</div>
+        <div class="text-2xl font-black text-emerald-700 leading-none"><span id="grand-total-display">0</span> <span class="text-xs font-bold text-gray-600">Pcs</span></div>
+      </div>
+      <button onclick="triggerSubmitConfirmation()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-5 py-3 rounded-xl shadow-lg text-sm flex items-center space-x-2">
+        <i class="fa-solid fa-cloud-arrow-up text-base"></i><span>SIMPAN DATABASE</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- FOOTER HAK CIPTA 2026 TAKOYA -->
+  <footer class="bg-white border-t border-gray-200 py-3 text-center text-xs text-gray-500 font-semibold mt-auto no-print">
+    <div class="max-w-7xl mx-auto px-4">
+      &copy; 2026 Takoya. Hak Cipta Dilindungi Undang-Undang.
+    </div>
+  </footer>
+
+  <!-- FOOTER KHUSUS CETAK PDF -->
+  <div class="print-footer-info">
+    &copy; 2026 Takoya. Sistem Manajemen Bad Stock Pabrik - Dokumen Rekapitulasi Resmi.
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. GANTI DENGAN URL WEB APP ANDA SENDIRI
+    // ==========================================
+    // Cara dapatkan URL ini: Di Google Apps Script -> Deploy -> New Deployment -> Web App -> Salin URL-nya (/exec)
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz7Y2tRuoCXMaYBbGZgswaBjIM1Oz_OntUQux6G7rQGdOxfX7fTsU4rkmlHNeWP3Xb8/exec"; 
+
+    // Fungsi universal pengganti google.script.run
+    async function callApi(action, payload = {}) {
+      try {
+        let response = await fetch(WEB_APP_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: action, payload: payload })
+        });
+        let result = await response.json();
+        return result;
+      } catch (err) {
+        console.error('Fetch API Error:', err);
+        return { success: false, message: 'Koneksi jaringan gagal: ' + err.message };
+      }
+    }
+    const CAT_SP = {
+      Kardus: [
+        { id: 'Kardus_RejectGudang', label: 'Reject Gudang' },
+        { id: 'Kardus_SambunganLepas', label: 'Sambungan Lepas' },
+        { id: 'Kardus_Sobek', label: 'Sobek' },
+        { id: 'Kardus_MissPrint', label: 'Miss Print' }
+      ],
+      SP: [
+        { id: 'SP_SealingNaik', label: 'Sealing Naik' },
+        { id: 'SP_Mengkerut', label: 'Mengkerut' },
+        { id: 'SP_Berlilin', label: 'Berlilin' },
+        { id: 'SP_Bocor', label: 'Bocor' },
+        { id: 'SP_BocorBottom', label: 'Bocor Bottom' },
+        { id: 'SP_PressKosong', label: 'Press Kosong' },
+        { id: 'SP_MissPrint', label: 'Miss Print' },
+        { id: 'SP_DoublePouch', label: 'Double Pouch' },
+        { id: 'SP_Lengket', label: 'Lengket' },
+        { id: 'SP_BeratKurang', label: 'Berat Kurang' },
+        { id: 'SP_BeratLebih', label: 'Berat Lebih' },
+        { id: 'SP_JepitSebelah', label: 'Jepit Sebelah' }
+      ],
+      TagPin: [{ id: 'TagPin_Putus', label: 'Tag Pin Putus' }],
+      IST: [{ id: 'IST_Putus', label: 'IST Putus' }]
+    };
+
+    const CAT_BOTOL = {
+      Kardus: [
+        { id: 'Kardus_RejectGudang', label: 'Reject Gudang' },
+        { id: 'Kardus_SambunganLepas', label: 'Sambungan Lepas' },
+        { id: 'Kardus_Sobek', label: 'Sobek' },
+        { id: 'Kardus_MissPrint', label: 'Miss Print' }
+      ],
+      Botol: [
+        { id: 'Botol_DeformasiBefore', label: 'Deformasi Before' },
+        { id: 'Botol_DeformasiAfter', label: 'Deformasi After' },
+        { id: 'Botol_Penyok', label: 'Penyok' },
+        { id: 'Botol_Bolong', label: 'Bolong' },
+        { id: 'Botol_LipsMiring', label: 'Lips Miring' },
+        { id: 'Botol_DratRusak', label: 'Drat Rusak' },
+        { id: 'Botol_PundakTipis', label: 'Pundak Tipis' },
+        { id: 'Botol_NeckPendek', label: 'Neck Pendek' }
+      ],
+      Shrink: [
+        { id: 'Shrink_MissPrint', label: 'Miss Print' },
+        { id: 'Shrink_Mengkerut', label: 'Mengkerut' },
+        { id: 'Shrink_Sobek', label: 'Sobek' },
+        { id: 'Shrink_LebarTidakStandar', label: 'Lebar Tdk Std' },
+        { id: 'Shrink_PotonganTidakRata', label: 'Potong Tdk Rata' }
+      ],
+      Tutup: [
+        { id: 'Tutup_FlipTopPatah', label: 'FlipTop Patah' },
+        { id: 'Tutup_FlipTopTidakBisaTutup', label: 'FlipTop Tdk Tutup' },
+        { id: 'Tutup_DratCapNoOK', label: 'Drat Cap No OK' }
+      ],
+      IST: [{ id: 'IST_Putus', label: 'IST Putus' }]
+    };
+
+    let counterState = {};
+    let isBotolPage = false;
+    let personalChartsInstances = {};
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setDefaultDate();
+      checkActiveSession();
+    });
+
+    function setDefaultDate() {
+      const today = new Date().toISOString().split('T')[0];
+      document.querySelectorAll('input[type="date"]').forEach(el => el.value = today);
+    }
+
+    function renderCategoryGroup(containerId, items) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+
+      items.forEach(item => {
+        counterState[item.id] = 0;
+        const card = document.createElement('div');
+        card.className = "flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-200";
+        card.innerHTML = `
+          <span class="text-xs font-bold text-gray-700 pr-2">${item.label}</span>
+          <div class="flex items-center space-x-1">
+            <button type="button" onclick="updateCounter('${item.id}', -1)" class="w-8 h-8 rounded bg-red-100 text-red-700 font-black text-base flex items-center justify-center">-</button>
+            <input type="number" id="input-${item.id}" value="0" min="0" onchange="manualInputCounter('${item.id}', this.value)" class="w-12 h-8 text-center font-black text-sm bg-white border rounded outline-none">
+            <button type="button" onclick="updateCounter('${item.id}', 1)" class="w-8 h-8 rounded bg-emerald-100 text-emerald-800 font-black text-base flex items-center justify-center">+</button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function updateCounter(itemId, delta) {
+      let currentVal = counterState[itemId] || 0;
+      let newVal = Math.max(0, currentVal + delta);
+      counterState[itemId] = newVal;
+      document.getElementById(`input-${itemId}`).value = newVal;
+      recalculateTotals();
+    }
+
+    function manualInputCounter(itemId, val) {
+      let parsed = Math.max(0, parseInt(val) || 0);
+      counterState[itemId] = parsed;
+      document.getElementById(`input-${itemId}`).value = parsed;
+      recalculateTotals();
+    }
+
+    function recalculateTotals() {
+      let grandTotal = 0;
+      if (!isBotolPage) {
+        let subKardus = sumCat(CAT_SP.Kardus);
+        let subSP = sumCat(CAT_SP.SP);
+        let subTP = sumCat(CAT_SP.TagPin);
+        let subIST = sumCat(CAT_SP.IST);
+        grandTotal = subKardus + subSP + subTP + subIST;
+
+        document.getElementById('subtotal-kardus').innerText = subKardus + ' Pcs';
+        document.getElementById('subtotal-sp').innerText = subSP + ' Pcs';
+        document.getElementById('subtotal-tagpin').innerText = subTP + ' Pcs';
+        document.getElementById('subtotal-ist').innerText = subIST + ' Pcs';
+      } else {
+        let subKardus = sumCat(CAT_BOTOL.Kardus);
+        let subBotol = sumCat(CAT_BOTOL.Botol);
+        let subShrink = sumCat(CAT_BOTOL.Shrink);
+        let subTutup = sumCat(CAT_BOTOL.Tutup);
+        let subIST = sumCat(CAT_BOTOL.IST);
+        grandTotal = subKardus + subBotol + subShrink + subTutup + subIST;
+
+        document.getElementById('subtotal-b-kardus').innerText = subKardus + ' Pcs';
+        document.getElementById('subtotal-b-botol').innerText = subBotol + ' Pcs';
+        document.getElementById('subtotal-b-shrink').innerText = subShrink + ' Pcs';
+        document.getElementById('subtotal-b-tutup').innerText = subTutup + ' Pcs';
+        document.getElementById('subtotal-b-ist').innerText = subIST + ' Pcs';
+      }
+      document.getElementById('grand-total-display').innerText = grandTotal;
+    }
+
+    function sumCat(items) { return items.reduce((s, i) => s + (counterState[i.id] || 0), 0); }
+
+    function checkActiveSession() {
+      const user = JSON.parse(sessionStorage.getItem('web_bs_user'));
+      if (user) setupUserUI(user);
+      else showView('view-login');
+    }
+
+    function setupUserUI(user) {
+      document.getElementById('user-badge').classList.remove('hidden');
+      document.getElementById('user-name-display').innerText = user.nama;
+      document.getElementById('user-role-display').innerText = user.role;
+
+      if (user.role === 'ADMIN' || user.role === 'PENGAWAS') {
+        showView('view-supervisor');
+        document.getElementById('sticky-bottom-bar').classList.add('hidden');
+        fetchSupervisorReport();
+      } else if (user.role === 'OPERATOR_TYPE2' || user.username === 'operator1') {
+        isBotolPage = true;
+        showView('view-operator-botol');
+        document.getElementById('sticky-bottom-bar').classList.remove('hidden');
+        initBotolWorkspace();
+        loadOperatorLogs(true);
+      } else {
+        isBotolPage = false;
+        showView('view-operator');
+        document.getElementById('sticky-bottom-bar').classList.remove('hidden');
+        initSPWorkspace();
+        loadOperatorLogs(false);
+      }
+    }
+
+    function initSPWorkspace() {
+      renderCategoryGroup('group-kardus', CAT_SP.Kardus);
+      renderCategoryGroup('group-sp', CAT_SP.SP);
+      renderCategoryGroup('group-tagpin', CAT_SP.TagPin);
+      renderCategoryGroup('group-ist', CAT_SP.IST);
+      recalculateTotals();
+    }
+
+    function initBotolWorkspace() {
+      renderCategoryGroup('group-b-kardus', CAT_BOTOL.Kardus);
+      renderCategoryGroup('group-b-botol', CAT_BOTOL.Botol);
+      renderCategoryGroup('group-b-shrink', CAT_BOTOL.Shrink);
+      renderCategoryGroup('group-b-tutup', CAT_BOTOL.Tutup);
+      renderCategoryGroup('group-b-ist', CAT_BOTOL.IST);
+      recalculateTotals();
+    }
+
+    function showView(viewId) {
+      ['view-login', 'view-operator', 'view-operator-botol', 'view-supervisor'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      document.getElementById(viewId).classList.remove('hidden');
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const u = document.getElementById('login-username').value;
+      const p = document.getElementById('login-password').value;
+      
+      const btnSubmit = document.getElementById('btn-login-submit');
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Memproses...`;
+
+      // Menggunakan callApi pengganti google.script.run
+      let res = await callApi('checkLogin', { username: u, password: p });
+      
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = `<span>MASUK KE SISTEM</span><i class="fa-solid fa-arrow-right"></i>`;
+
+      if (res.success) {
+        sessionStorage.setItem('web_bs_user', JSON.stringify(res.user));
+        setupUserUI(res.user);
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+
+    function logout() {
+      sessionStorage.removeItem('web_bs_user');
+      document.getElementById('user-badge').classList.add('hidden');
+      document.getElementById('sticky-bottom-bar').classList.add('hidden');
+      showView('view-login');
+    }
+
+    function switchSpvTab(tabId) {
+      const isCatatan = tabId === 'tab-catatan';
+      document.getElementById('spv-tab-catatan').classList.toggle('hidden', !isCatatan);
+      document.getElementById('spv-tab-grafik').classList.toggle('hidden', isCatatan);
+
+      const btnCatatan = document.getElementById('nav-tab-catatan');
+      const btnGrafik = document.getElementById('nav-tab-grafik');
+
+      if (isCatatan) {
+        btnCatatan.className = "w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-sm transition";
+        btnGrafik.className = "w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition";
+      } else {
+        btnGrafik.className = "w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-sm transition";
+        btnCatatan.className = "w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition";
+      }
+    }
+
+    function triggerSubmitConfirmation() {
+      let grandTotal = parseInt(document.getElementById('grand-total-display').innerText) || 0;
+      if (grandTotal <= 0) return showToast('Total BS harus lebih dari 0!', 'error');
+
+      if (isBotolPage) {
+        document.getElementById('wrapper-pemakaian-sp').style.display = 'none';
+        document.getElementById('box-persen-sp').style.display = 'none';
+        document.getElementById('modal-grid-persen').classList.remove('grid-cols-2');
+        document.getElementById('modal-grid-persen').classList.add('grid-cols-1');
+      } else {
+        document.getElementById('wrapper-pemakaian-sp').style.display = 'block';
+        document.getElementById('box-persen-sp').style.display = 'block';
+        document.getElementById('modal-grid-persen').classList.remove('grid-cols-1');
+        document.getElementById('modal-grid-persen').classList.add('grid-cols-2');
+        document.getElementById('label-pemakaian-sp').innerText = 'JUMLAH PEMAKAIAN SP (Pcs):';
+        document.getElementById('input-pemakaian-sp').value = '';
+      }
+
+      document.getElementById('input-pemakaian-kardus').value = '';
+      document.getElementById('input-hasil-produksi').value = '';
+
+      document.getElementById('modal-phase-1').classList.remove('hidden');
+      document.getElementById('modal-phase-2').classList.add('hidden');
+      document.getElementById('modal-title').innerText = 'Fase 1: Input Pemakaian & Produksi';
+      document.getElementById('confirm-modal').classList.remove('hidden');
+    }
+
+    function goToPhase2() {
+      const pemakaianKardus = Number(document.getElementById('input-pemakaian-kardus').value);
+      const pemakaianSP = isBotolPage ? 0 : Number(document.getElementById('input-pemakaian-sp').value);
+      const hasilProduksi = Number(document.getElementById('input-hasil-produksi').value);
+
+      if (pemakaianKardus <= 0 || (!isBotolPage && pemakaianSP <= 0)) {
+        return showToast('Jumlah Pemakaian harus diisi (>0)!', 'error');
+      }
+
+      const user = JSON.parse(sessionStorage.getItem('web_bs_user'));
+      const dateVal = isBotolPage ? document.getElementById('op-botol-date').value : document.getElementById('op-date').value;
+      const shiftVal = isBotolPage ? document.getElementById('op-botol-shift').value : document.getElementById('op-shift').value;
+      const grandTotal = parseInt(document.getElementById('grand-total-display').innerText) || 0;
+
+      let totalKardusBS = sumCat(CAT_BOTOL.Kardus);
+      let persenKardus = ((100 / pemakaianKardus) * totalKardusBS).toFixed(2);
+
+      document.getElementById('modal-op-name').innerText = user.nama;
+      document.getElementById('modal-op-meta').innerText = `${dateVal} (Shift ${shiftVal})`;
+      document.getElementById('modal-op-hprod').innerText = `${hasilProduksi} Box`;
+      document.getElementById('modal-val-persen-kardus').innerText = `${persenKardus}%`;
+
+      if (!isBotolPage) {
+        let totalPrimaryBS = sumCat(CAT_SP.SP);
+        let persenSP = ((100 / pemakaianSP) * totalPrimaryBS).toFixed(2);
+        document.getElementById('modal-val-persen-sp').innerText = `${persenSP}%`;
+      }
+
+      document.getElementById('modal-grand-total').innerText = `${grandTotal} Pcs`;
+
+      const listContainer = document.getElementById('modal-items-list');
+      listContainer.innerHTML = '';
+
+      let schema = isBotolPage ? CAT_BOTOL : CAT_SP;
+      Object.keys(schema).forEach(catKey => {
+        schema[catKey].forEach(item => {
+          let val = counterState[item.id] || 0;
+          if (val > 0) {
+            let row = document.createElement('div');
+            row.className = "flex justify-between items-center py-1 px-1";
+            row.innerHTML = `<span class="font-medium text-gray-700">${item.label}</span><span class="font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded text-xs">${val} Pcs</span>`;
+            listContainer.appendChild(row);
+          }
+        });
+      });
+
+      document.getElementById('modal-phase-1').classList.add('hidden');
+      document.getElementById('modal-phase-2').classList.remove('hidden');
+      document.getElementById('modal-title').innerText = 'Fase 2: Konfirmasi Data & Persentase';
+    }
+
+    function backToPhase1() {
+      document.getElementById('modal-phase-2').classList.add('hidden');
+      document.getElementById('modal-phase-1').classList.remove('hidden');
+      document.getElementById('modal-title').innerText = 'Fase 1: Input Pemakaian & Produksi';
+    }
+
+    function closeConfirmModal() { document.getElementById('confirm-modal').classList.add('hidden'); }
+
+    async function executeFinalSave() {
+      const user = JSON.parse(sessionStorage.getItem('web_bs_user'));
+      const dateVal = isBotolPage ? document.getElementById('op-botol-date').value : document.getElementById('op-date').value;
+      const shiftVal = isBotolPage ? document.getElementById('op-botol-shift').value : document.getElementById('op-shift').value;
+
+      const payload = {
+        tanggal: dateVal, shift: shiftVal, username: user.username, nama: user.nama,
+        pemakaianSP: isBotolPage ? 0 : Number(document.getElementById('input-pemakaian-sp').value),
+        pemakaianKardus: Number(document.getElementById('input-pemakaian-kardus').value),
+        hasilProduksi: Number(document.getElementById('input-hasil-produksi').value),
+        isBotolPage: isBotolPage,
+        items: counterState
+      };
+
+      const btnModal = document.getElementById('btn-modal-agree');
+      btnModal.disabled = true;
+      btnModal.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Menyimpan...`;
+
+      // Menggunakan callApi
+      let res = await callApi('saveBadStockData', payload);
+      
+      btnModal.disabled = false;
+      btnModal.innerHTML = `<i class="fa-solid fa-check"></i> <span>Setuju & Simpan</span>`;
+      closeConfirmModal();
+
+      if (res.success) {
+        showToast(res.message, 'success');
+        if (isBotolPage) initBotolWorkspace(); else initSPWorkspace();
+        loadOperatorLogs(isBotolPage);
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+
+    async function loadOperatorLogs(isBotol) {
+      const user = JSON.parse(sessionStorage.getItem('web_bs_user'));
+      if (!user) return;
+
+      // Menggunakan callApi
+      let res = await callApi('getDashboardData', { username: user.username, isBotolPage: isBotol });
+      const tbody = document.getElementById(isBotol ? 'operator-botol-log-tbody' : 'operator-log-tbody');
+      
+      if (!res.success || !res.logs || res.logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-gray-400">Belum ada riwayat.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = res.logs.map(log => `
+        <tr class="border-b hover:bg-gray-50">
+          <td class="p-2 font-mono font-bold text-gray-700">${log.idRecord}</td>
+          <td class="p-2">${log.tanggal} (Shift ${log.shift})</td>
+          <td class="p-2 text-right font-black text-emerald-800">${log.hasilProduksi} Box</td>
+          <td class="p-2 text-right font-black text-red-700">${log.totalBS} Pcs</td>
+          <td class="p-2 text-center">
+            ${log.canDelete 
+              ? `<button onclick="deleteLog('${log.idRecord}', ${isBotol})" class="bg-red-50 text-red-600 font-bold px-2 py-1 rounded">Hapus</button>`
+              : `<span class="text-gray-300 font-bold">Terkunci</span>`
+            }
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function deleteLog(recordId, isBotol) {
+      if (!confirm(`Hapus record ${recordId}?`)) return;
+      const user = JSON.parse(sessionStorage.getItem('web_bs_user'));
+      
+      // Menggunakan callApi
+      let res = await callApi('deleteTransaction', { recordId: recordId, username: user.username, isBotolPage: isBotol });
+      if (res.success) {
+        showToast(res.message, 'success');
+        loadOperatorLogs(isBotol);
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+	
+
+    async function fetchSupervisorReport() {
+      const start = document.getElementById('spv-start-date').value;
+      const end = document.getElementById('spv-end-date').value;
+      const shift = document.getElementById('spv-shift').value;
+
+      // Menggunakan callApi
+      let res = await callApi('getSupervisorDataFiltered', { startDate: start, endDate: end, shiftFilter: shift });
+      if (!res.success) return showToast(res.message, 'error');
+
+      // Tabel SP
+      const tbodySP = document.getElementById('spv-sp-tbody');
+      if (!res.spData.records || res.spData.records.length === 0) {
+        tbodySP.innerHTML = `<tr><td colspan="29" class="p-3 text-gray-400">Data SP Kosong.</td></tr>`;
+      } else {
+        tbodySP.innerHTML = res.spData.records.map(r => `
+          <tr class="border-b hover:bg-gray-50">
+            <td class="p-1 border text-left font-mono"><b>${r.idRecord}</b><br>${r.tanggal}</td>
+            <td class="p-1 border font-bold">${r.shift}</td><td class="p-1 border">${r.operator}</td>
+            <td class="p-1 border font-bold bg-amber-50">${r.pemakaianSP}</td><td class="p-1 border font-bold bg-blue-50">${r.pemakaianKardus}</td>
+            <td class="p-1 border font-black text-amber-800 bg-amber-100">${r.persenSP}%</td><td class="p-1 border font-black text-blue-800 bg-blue-100">${r.persenKardus}%</td>
+            <td class="p-1 border">${r.kRg}</td><td class="p-1 border">${r.kSl}</td><td class="p-1 border">${r.kSb}</td><td class="p-1 border">${r.kMp}</td><td class="p-1 border font-bold bg-amber-50">${r.kTot}</td>
+            <td class="p-1 border">${r.spSn}</td><td class="p-1 border">${r.spMg}</td><td class="p-1 border">${r.spBr}</td><td class="p-1 border">${r.spBc}</td><td class="p-1 border">${r.spBb}</td><td class="p-1 border">${r.spPk}</td><td class="p-1 border">${r.spMp}</td><td class="p-1 border">${r.spDp}</td><td class="p-1 border">${r.spLk}</td><td class="p-1 border">${r.spBk}</td><td class="p-1 border">${r.spBl}</td><td class="p-1 border">${r.spJs}</td><td class="p-1 border font-bold bg-blue-50">${r.spTot}</td>
+            <td class="p-1 border">${r.tpPt}</td><td class="p-1 border font-bold bg-purple-50">${r.tpTot}</td>
+            <td class="p-1 border">${r.istPt}</td><td class="p-1 border font-bold bg-orange-50">${r.istTot}</td>
+            <td class="p-1 border font-black text-emerald-800 bg-emerald-100">${r.grandTotal}</td>
+            <td class="p-1 border font-black text-emerald-900 bg-emerald-200">${r.hasilProduksi}</td>
+          </tr>
+        `).join('');
+      }
+
+      // Tabel Botol
+      const tbodyBotol = document.getElementById('spv-botol-tbody');
+      if (!res.botolData.records || res.botolData.records.length === 0) {
+        tbodyBotol.innerHTML = `<tr><td colspan="33" class="p-3 text-gray-400">Data Botol Kosong.</td></tr>`;
+      } else {
+        tbodyBotol.innerHTML = res.botolData.records.map(r => `
+          <tr class="border-b hover:bg-gray-50">
+            <td class="p-1 border text-left font-mono"><b>${r.idRecord}</b><br>${r.tanggal}</td>
+            <td class="p-1 border font-bold">${r.shift}</td><td class="p-1 border">${r.operator}</td>
+            <td class="p-1 border font-bold bg-blue-50">${r.pemakaianKardus}</td><td class="p-1 border font-black text-blue-800 bg-blue-100">${r.persenKardus}%</td>
+            <td class="p-1 border">${r.kRg}</td><td class="p-1 border">${r.kSl}</td><td class="p-1 border">${r.kSb}</td><td class="p-1 border">${r.kMp}</td><td class="p-1 border font-bold bg-amber-50">${r.kTot}</td>
+            <td class="p-1 border">${r.btDb}</td><td class="p-1 border">${r.btDa}</td><td class="p-1 border">${r.btPy}</td><td class="p-1 border">${r.btBl}</td><td class="p-1 border">${r.btLm}</td><td class="p-1 border">${r.btDr}</td><td class="p-1 border">${r.btPt}</td><td class="p-1 border">${r.btNp}</td><td class="p-1 border font-bold bg-cyan-50">${r.btTot}</td>
+            <td class="p-1 border">${r.shMp}</td><td class="p-1 border">${r.shMg}</td><td class="p-1 border">${r.shSb}</td><td class="p-1 border">${r.shLt}</td><td class="p-1 border">${r.shPr}</td><td class="p-1 border font-bold bg-teal-50">${r.shTot}</td>
+            <td class="p-1 border">${r.tpFp}</td><td class="p-1 border">${r.tpFt}</td><td class="p-1 border">${r.tpDc}</td><td class="p-1 border font-bold bg-indigo-50">${r.tpTot}</td>
+            <td class="p-1 border">${r.istPt}</td><td class="p-1 border font-bold bg-orange-50">${r.istTot}</td>
+            <td class="p-1 border font-black text-emerald-800 bg-emerald-100">${r.grandTotal}</td>
+            <td class="p-1 border font-black text-emerald-900 bg-emerald-200">${r.hasilProduksi}</td>
+          </tr>
+        `).join('');
+      }
+
+      renderPersonalAccountCharts(res.spData.records.concat(res.botolData.records));
+    }
+    function printpage() {
+    window.print(); //open the print dialog to print the page
+    }
+
+    function renderPersonalAccountCharts(allRecords) {
+      let operatorGroups = {};
+      let operatorTotals = {};
+
+      allRecords.forEach(r => {
+        let opName = r.operator || 'Unknown';
+        if (!operatorGroups[opName]) {
+          operatorGroups[opName] = { isBotol: r.isBotol, records: [] };
+        }
+        operatorGroups[opName].records.push(r);
+
+        if (!operatorTotals[opName]) operatorTotals[opName] = 0;
+        operatorTotals[opName] += Number(r.grandTotal || 0);
+      });
+
+      let highestOp = '-';
+      let maxBs = -1;
+      Object.keys(operatorTotals).forEach(op => {
+        if (operatorTotals[op] > maxBs) {
+          maxBs = operatorTotals[op];
+          highestOp = op;
+        }
+      });
+
+      const warningText = document.getElementById('warning-banner-text');
+      if (highestOp !== '-') {
+        warningText.innerHTML = `Akun/Operator <b>${highestOp}</b> memiliki total akumulasi BS tertinggi yaitu sebesar <b>${maxBs} Pcs</b>.`;
+      } else {
+        warningText.innerHTML = `Belum ada data terekam pada rentang tanggal filter yang dipilih.`;
+      }
+
+      Object.keys(personalChartsInstances).forEach(id => {
+        if (personalChartsInstances[id]) personalChartsInstances[id].destroy();
+      });
+      personalChartsInstances = {};
+
+      const container = document.getElementById('operator-charts-container');
+      container.innerHTML = '';
+
+      let opKeys = Object.keys(operatorGroups);
+      if (opKeys.length === 0) {
+        container.innerHTML = `<div class="bg-white p-6 rounded-xl border text-center text-gray-400">Tidak ada data grafik untuk akun operator pada rentang tanggal ini.</div>`;
+        return;
+      }
+
+      opKeys.forEach(opName => {
+        let groupData = operatorGroups[opName];
+        let isWarningAccount = (opName === highestOp && maxBs > 0);
+
+        let card = document.createElement('div');
+        card.className = `bg-white rounded-xl shadow-sm border ${isWarningAccount ? 'border-red-400 ring-2 ring-red-100' : 'border-gray-200'} p-4 space-y-3`;
+        
+        let headerHtml = `
+          <div class="flex justify-between items-center border-b pb-2">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-chart-line text-emerald-700"></i>
+              <h4 class="font-black text-xs uppercase text-gray-800">Chart Akun: ${opName}</h4>
+              ${isWarningAccount ? '<span class="bg-red-100 text-red-700 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase"><i class="fa-solid fa-triangle-exclamation"></i> Tertinggi (Warning)</span>' : ''}
+            </div>
+            <span class="text-[11px] font-bold text-gray-500">Total Akumulasi: <strong class="text-emerald-700">${operatorTotals[opName]} Pcs</strong></span>
+          </div>
+        `;
+
+        let canvasId = `chart-op-${opName.replace(/\s+/g, '_')}`;
+        let chartBodyHtml = `
+          <div class="relative w-full h-64">
+            <canvas id="${canvasId}"></canvas>
+          </div>
+        `;
+
+        card.innerHTML = headerHtml + chartBodyHtml;
+        container.appendChild(card);
+
+        let dateSorted = groupData.records.sort((a,b) => a.tanggal.localeCompare(b.tanggal));
+        let labels = [...new Set(dateSorted.map(r => r.tanggal))];
+
+        let datasets = [];
+        if (!groupData.isBotol) {
+          let dataKardus = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.kTot || 0), 0);
+          });
+          let dataSP = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.spTot || 0), 0);
+          });
+          let dataTagPin = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.tpTot || 0), 0);
+          });
+          let dataIST = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.istTot || 0), 0);
+          });
+
+          datasets = [
+            { label: 'BS Kardus', data: dataKardus, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, tension: 0.2 },
+            { label: 'BS SP', data: dataSP, borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderWidth: 2, tension: 0.2 },
+            { label: 'TagPin', data: dataTagPin, borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', borderWidth: 2, tension: 0.2 },
+            { label: 'IST', data: dataIST, borderColor: '#ea580c', backgroundColor: '#ea580c', borderWidth: 2, tension: 0.2 }
+          ];
+        } else {
+          let dataKardus = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.kTot || 0), 0);
+          });
+          let dataBotol = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.btTot || 0), 0);
+          });
+          let dataShrink = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.shTot || 0), 0);
+          });
+          let dataTutup = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.tpTot || 0), 0);
+          });
+          let dataIST = labels.map(date => {
+            let match = groupData.records.filter(r => r.tanggal === date);
+            return match.reduce((sum, r) => sum + Number(r.istTot || 0), 0);
+          });
+
+          datasets = [
+            { label: 'BS Kardus', data: dataKardus, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, tension: 0.2 },
+            { label: 'BS Botol', data: dataBotol, borderColor: '#06b6d4', backgroundColor: '#06b6d4', borderWidth: 2, tension: 0.2 },
+            { label: 'Shrink', data: dataShrink, borderColor: '#14b8a6', backgroundColor: '#14b8a6', borderWidth: 2, tension: 0.2 },
+            { label: 'Tutup', data: dataTutup, borderColor: '#6366f1', backgroundColor: '#6366f1', borderWidth: 2, tension: 0.2 },
+            { label: 'IST', data: dataIST, borderColor: '#ea580c', backgroundColor: '#ea580c', borderWidth: 2, tension: 0.2 }
+          ];
+        }
+
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        personalChartsInstances[canvasId] = new Chart(ctx, {
+          type: 'line',
+          data: { labels: labels, datasets: datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'top', labels: { boxWidth: 10, font: { size: 9 } } }
+            },
+            scales: {
+              y: { beginAtZero: true }
+            }
+          }
+        });
+      });
+    }
+    
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      let bgColor = type === 'success' ? 'bg-emerald-700' : (type === 'error' ? 'bg-red-700' : 'bg-gray-800');
+      toast.className = `${bgColor} text-white p-3 rounded-lg shadow-xl text-xs font-bold flex justify-between mb-2 pointer-events-auto`;
+      toast.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.remove()" class="ml-2">&times;</button>`;
+      container.appendChild(toast);
+      setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
+    }
+  </script>
+</body>
+</html>
